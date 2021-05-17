@@ -142,3 +142,69 @@ static size_t unpack_mqtt_subscribe(const unsigned char *buf, union mqtt_header 
     packet->subscribe = subscribe;
     return len;
 }
+
+static size_t unpack_mqtt_unsubscribe(const unsigned char *buf, union mqtt_header *header, union mqtt_packet *packet) {
+    struct mqtt_unsubscribe unsubscribe = { .header = *header };
+
+    size_t len = mqtt_decode_length(&buf);
+    size_t remaining_bytes = len;
+
+    unsubscribe.pkt_id = unpack_u16((const uint8_t**) &buf);
+    remaining_bytes -= sizeof(uint16_t);
+
+    int i = 0;
+    while (remaining_bytes > 0) {
+        remaining_bytes -= sizeof(uint16_t);
+
+        unsubscribe.tuples = realloc(unsubscribe.tuples, (i + 1) * sizeof(*unsubscribe.tuples));
+
+        unsubscribe.tuples[i].topic_len = unpack_u16(&buf, &unsubscribe.tuples[i].topic);
+        remaining_bytes -= unsubscribe.tuples[i].topic_len;
+
+        i++;
+    }
+    unsubscribe.tuples_len = i;
+
+    packet->unsubscribe = unsubscribe;
+    return len;
+}
+
+static size_t unpack_mqtt_ack(const unsigned char *buf, union mqtt_header *header, union mqtt_packet *packet) {
+    struct mqtt_ack ack = { .header = *header };
+
+    size_t len = mqtt_decode_length(&buf);
+    ack.pkt_id = unpack_u16((const uint8_t**) &buf);
+    packet->ack = ack;
+
+    return len;
+}
+
+typedef size_t mqtt_unpack_handler(const unsigned char *, union mqtt_header, union mqtt_packet);
+
+static mqtt_unpack_handler *unpack_handlers[11] = {
+        NULL,
+        unpack_mqtt_connect,
+        NULL,
+        unpack_mqtt_publish,
+        unpack_mqtt_ack,
+        unpack_mqtt_ack,
+        unpack_mqtt_ack,
+        unpack_mqtt_ack,
+        unpack_mqtt_subscribe,
+        NULL,
+        unpack_mqtt_unsubscribe
+};
+
+int unpack_mqtt_packet(const unsigned char *buf, union mqtt_packet *packet) {
+    int r = 0;
+
+    unsigned char type = *buf;
+    union mqtt_header header = { .byte = type };
+
+    if (header.bits.type == DISCONNECT || header.bits.type == PINGREQ || header.bits.type == PINGRESP)
+        packet->header = header;
+    else
+        r = unpack_handlers[header.bits.type](++buf, &header, packet);
+
+    return r;
+}
