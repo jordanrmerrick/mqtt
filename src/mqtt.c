@@ -208,3 +208,55 @@ int unpack_mqtt_packet(const unsigned char *buf, union mqtt_packet *packet) {
 
     return r;
 }
+
+union mqtt_header *mqtt_packet_header(unsigned char byte) {
+    static union mqtt_header header;
+
+    header.byte = byte;
+    return &header;
+}
+
+struct mqtt_ack *mqtt_packet_ack(unsigned char byte, unsigned short packet_id) {
+    static struct mqtt_ack ack;
+    ack.header.byte = byte;
+    ack.pkt_id = packet_id;
+
+    return &ack;
+}
+
+struct mqtt_connack *mqtt_packet_connack(unsigned char byte, unsigned char cflags, unsigned char rc) {
+    static struct mqtt_connack connack;
+    connack.header.byte = byte;
+    connack.byte = cflags;
+    connack.rc = rc;
+
+    return &connack;
+}
+
+struct mqtt_suback *mqtt_packet_suback(unsigned char byte, unsigned short packet_id, unsigned char *rcs, unsigned short rcslen) {
+    struct mqtt_suback *suback = malloc(sizeof(*suback));
+
+    suback->header.byte = byte;
+    suback->pkt_id = packet_id;
+
+    suback->rcslen = rcslen;
+
+    suback->rcs = malloc(rcslen);
+    memcpy(suback->rcs, rcs, rcslen);
+
+    return suback;
+}
+
+struct mqtt_publish *mqtt_packet_publish(unsigned char byte, unsigned short packet_id, size_t topic_len, unsigned char *topic, size_t payload_len, unsigned char *payload) {
+    struct mqtt_publish *publish = malloc(sizeof(*publish));
+
+    publish->header.byte = byte;
+    publish->pkt_id = packet_id;
+
+    publish->topic_len = topic_len;
+    publish->payload_len = payload_len;
+
+    publish->topic = topic;
+    publish->payload = payload;
+}
+
