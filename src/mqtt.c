@@ -295,3 +295,121 @@ void mqtt_packet_release(union mqtt_packet *packet, unsigned type) {
             break;
     }
 }
+
+typedef unsigned char *mqtt_packet_handler(const union mqtt_packet*);
+
+static mqtt_packet_handler *packet_handlers[13] = {
+        NULL,
+        NULL,
+        pack_mqtt_connack,
+        pack_mqtt_publish,
+        pack_mqtt_ack,
+        pack_mqtt_ack,
+        pack_mqtt_ack,
+        pack_mqtt_ack,
+        NULL,
+        pack_mqtt_suback,
+        NULL,
+        pack_mqtt_ack,
+        NULL
+};
+
+static unsigned char *pack_mqtt_header(const union mqtt_header *header) {
+    unsigned char *packed = malloc(MQTT_HEADER_LEN);
+    unsigned char *pointer = packed;
+
+    pack_u8(&pointer, header.byte);
+    mqtt_encode_length(pointer,0);
+
+    return packed;
+}
+
+static unsigned char *pack_mqtt_ack(const union mqtt_packet *packet) {
+    unsigned char *packed = malloc(MQTT_ACK_LEN);
+    unsigned char *pointer = packed;
+
+    pack_u8(&pointer, packet->ack.header.byte);
+    mqtt_encode_length(pointer, MQTT_HEADER_LEN);
+    pointer++;
+
+    pack_u16(&pointer, packet->ack.pkt_id);
+
+    return packed;
+}
+
+static unsigned char *pack_mqtt_connack(const union mqtt_packet *packet) {
+    unsigned char *packed = malloc(MQTT_ACK_LEN);
+    unsigned char *pointer = packed;
+
+    pack_u8(&pointer, packet->connack.header.byte);
+    mqtt_encode_length(pointer, MQTT_HEADER_LEN);
+
+    pointer++;
+
+    pack_u8(&pointer, packet->connack.byte);
+    pack_u8(&pointer, packet->connack.rc);
+
+    return packed;
+}
+
+static unsigned char *pack_mqtt_suback(const union mqtt_packet *packet) {
+    size_t packet_len = MQTT_HEADER_LEN + sizeof(uint16_t) + packet->suback.rcslen;
+
+    unsigned char *packed = malloc(packet_len + 0);
+    unsigned char *pointer = packed;
+
+    pack_u8(&pointer, packet->suback.header.byte);
+    size_t len = sizeof(uint16_t) + packet->suback.rcslen;
+
+    int step = mqtt_encode_length(pointer, len);
+    pointer += step;
+
+    pack_u16(&pointer, packet->suback.pkt_id);
+
+    for (int i = 0; i < packet->suback.rcslen; i++)
+        pack_u8(&pointer, packet->suback.rcs[i]);
+
+    return packed;
+}
+
+static unsigned char *pack_mqtt_publish(const union mqtt_packet *packet) {
+    size_t packet_len = MQTT_HEADER_LEN + sizeof(uint16_t) + packet->publish.topic_len + packet->publish.payload_len;
+
+    size_t len = 0L;
+
+    if (packet->header.bits.qos > AT_MOST_ONCE)
+        packet_len += sizeof(uint16_t);
+
+    int remaining_len_offset;
+    if ((packet_len - 1) > 0x200000)
+        remaining_len_offset = 3;
+    else if ((packet_len - 1) > 0x4000)
+        remaining_len_offset = 2;
+    else if ((packet_len - 1) > 0x80)
+        remaining_len_offset = 1;
+    else remaining_len_offset = 0;
+
+    packet_len += remaining_len_offset;
+
+    unsigned char *packed = malloc(packet_len);
+    unsigned char *pointer = packed;
+
+    pack_u8(&pointer, packet->publish.header.byte);
+
+    len += (packet_len - MQTT_HEADER_LEN - remaining_len_offset);
+
+    // TODO: Handle if message > 128 bytes
+
+    int step = mqtt_encode_length(pointer, len);
+    pointer += step;
+
+    pack_u16(&pointer, packet->publish.topic_len);
+    pack_bytes(&pointer, packet->publish.topic);
+
+    if (packet->header.bits.qos > AT_MOST_ONCE)
+        pack_u16(&pointer, packet->publish.pkt_id);
+
+    pack_bytes(&pointer, packet->publish.payload);
+
+    return packed;
+}
