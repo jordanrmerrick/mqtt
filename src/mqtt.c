@@ -258,5 +258,7 @@ struct mqtt_publish *mqtt_packet_publish(unsigned char byte, unsigned short pack
 
     publish->topic = topic;
     publish->payload = payload;
+
+    return publish;
 }
 
