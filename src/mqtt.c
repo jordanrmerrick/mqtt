@@ -413,3 +413,10 @@ static unsigned char *pack_mqtt_publish(const union mqtt_packet *packet) {
 
     return packed;
 }
+
+unsigned char *pack_mqtt_header(const union mqtt_packet *packet, unsigned type) {
+    if (type == PINGRESP || type == PINGREQ)
+        return pack_mqtt_header(&packet->header);
+
+    return pack_handlers[type](packet);
+}
