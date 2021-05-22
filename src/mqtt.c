@@ -262,3 +262,36 @@ struct mqtt_publish *mqtt_packet_publish(unsigned char byte, unsigned short pack
     return publish;
 }
 
+void mqtt_packet_release(union mqtt_packet *packet, unsigned type) {
+    switch (type) {
+        case CONNECT:
+            free(packet->connect.payload.client_id);
+            if (packet->connect.bits.username == 1)
+                free(packet->connect.payload.username);
+            if (packet->connect.bits.password == 1)
+                free(packet->connect.payload.password);
+            if (packet->connect.bits.will == 1) {
+                free(packet->connect.payload.will_topic);
+                free(packet->connect.payload.will_message);
+            }
+            break;
+
+        case SUBSCRIBE:
+        case UNSUBSCRIBE:
+            for (unsigned i = 0; i < packet->subscribe.tuples_len; i++)
+                free(packet->subscribe.tuples[i].topic);
+            break;
+
+        case SUBACK:
+            free(packet->suback.rcs);
+            break;
+
+        case PUBLISH:
+            free(packet->publish.topic);
+            free(packet->publish.payload);
+            break;
+
+        default:
+            break;
+    }
+}
